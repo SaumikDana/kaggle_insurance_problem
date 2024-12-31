@@ -120,13 +120,20 @@ def preprocess_data(df):
     # 1. Extract 'id' and 'Premium Amount' columns
     # -------------------------------------------------------
     id_col = df['id'].copy()
-    premium_col = df['Premium Amount'].copy()
+    if 'Premium Amount' in df.columns:
+        flag = True
+        premium_col = df['Premium Amount'].copy()
+    else:
+        flag = False
 
     # -------------------------------------------------------
     # 2. Drop unwanted columns
     # -------------------------------------------------------
     # 'errors="ignore"' just in case the columns don't exist
-    df.drop(columns=['id', 'Policy Start Date', 'Premium Amount'], inplace=True, errors='ignore')
+    if flag:
+        df.drop(columns=['id', 'Policy Start Date', 'Premium Amount'], inplace=True, errors='ignore')
+    else:
+        df.drop(columns=['id', 'Policy Start Date'], inplace=True, errors='ignore')
 
     # -------------------------------------------------------
     # 3. Identify which columns are numeric vs. categorical
@@ -196,7 +203,8 @@ def preprocess_data(df):
     # -------------------------------------------------------
     # 6. Add 'Premium Amount' back
     # -------------------------------------------------------
-    df_imputed['Premium Amount'] = premium_col.values
+    if flag:
+        df_imputed['Premium Amount'] = premium_col.values
 
     # -------------------------------------------------------
     # 7. Re-apply the original dtypes where possible
