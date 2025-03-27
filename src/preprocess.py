@@ -86,13 +86,27 @@ def preprocess_data(df):
 
     # Define numeric and categorical feature sets
     numeric_cols = [
-        'Age', 'Annual Income', 'Health Score', 'Credit Score', 'Vehicle Age',
-        'Number of Dependents', 'Previous Claims', 'Insurance Duration'
+        'Age', 
+        'Annual Income', 
+        'Health Score', 
+        'Credit Score', 
+        'Vehicle Age',
+        'Number of Dependents', 
+        'Previous Claims', 
+        'Insurance Duration'
     ]
 
     categorical_cols = [
-        'Gender', 'Marital Status', 'Education Level', 'Occupation', 'Location',
-        'Policy Type', 'Customer Feedback', 'Smoking Status', 'Exercise Frequency', 'Property Type'
+        'Gender', 
+        'Marital Status', 
+        'Education Level', 
+        'Occupation', 
+        'Location',
+        'Policy Type', 
+        'Customer Feedback', 
+        'Smoking Status', 
+        'Exercise Frequency', 
+        'Property Type'
     ]
 
     # Impute missing values using random sampling
@@ -114,17 +128,16 @@ def preprocess_data(df):
     # Return the cleaned DataFrame and the id column separately
     return df, id_col
 
-# -------------------------------------------------------
-# Example usage
-# -------------------------------------------------------
-if __name__ == "__main__":
-    # Let's say you read your dataset:
-    df_raw = pd.read_csv('train.csv')
 
-    # Call the function
-    df_clean, id_series = preprocess_data(df_raw)
+def initialize_metadata(df):
 
-    # Print checks
-    print("Missing values after imputation:\n", df_clean.isnull().sum())
-    print("\nSample of 'id' column:\n", id_series.head())
-    print("\nImputed DataFrame (head):\n", df_clean.head())
+    categorical_features = df.select_dtypes(include=['object', 'category']).columns.tolist()
+
+    if 'Premium Amount' in categorical_features:
+
+        categorical_features.remove('Premium Amount')
+    
+    category_mappings = {col: sorted(df[col].unique()) for col in categorical_features}
+
+    return categorical_features, category_mappings
+

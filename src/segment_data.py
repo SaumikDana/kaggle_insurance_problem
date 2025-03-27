@@ -91,4 +91,3 @@ def segment_data(df):
     print(f"Records per segment on average: {total_assigned/len(segments):,.1f}")
 
     return segments
-
