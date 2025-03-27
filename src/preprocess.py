@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
+
 
 # -------------------------------------------------------
 # Multi-Column DistributionImputer
@@ -15,14 +15,14 @@ class DistributionImputer(BaseEstimator, TransformerMixin):
     
     Parameters
     ----------
-    col_type : {'continuous', 'categorical'}, default='continuous'
-        'continuous': sample from raw numeric array of observed values per column
+    col_type : {'numeric', 'categorical'}, default='numeric'
+        'numeric': sample from raw numeric array of observed values per column
         'categorical': sample from frequency distribution per column
     random_state : int or None
         random seed for reproducibility
     """
 
-    def __init__(self, col_type='continuous', random_state=None):
+    def __init__(self, col_type='numeric', random_state=None):
         self.col_type = col_type
         self.random_state = random_state
         
@@ -45,7 +45,7 @@ class DistributionImputer(BaseEstimator, TransformerMixin):
             # Drop NaNs
             non_missing = col_data[~pd.isna(col_data)]
 
-            if self.col_type == 'continuous':
+            if self.col_type == 'numeric':
                 # Just store raw non-missing values for sampling later
                 self._col_values.append(non_missing)
                 self._col_categories.append(None)
@@ -74,7 +74,7 @@ class DistributionImputer(BaseEstimator, TransformerMixin):
                 continue
 
             n_missing = missing_mask.sum()
-            if self.col_type == 'continuous':
+            if self.col_type == 'numeric':
                 sample_pool = self._col_values[col_i]
                 if sample_pool is not None and len(sample_pool) > 0:
                     X[missing_mask, col_i] = self.rng_.choice(sample_pool, size=n_missing, replace=True)
@@ -137,43 +137,36 @@ def preprocess_data(df):
     # -------------------------------------------------------
     # 3. Identify which columns are numeric vs. categorical
     # -------------------------------------------------------
-    continuous_numeric_cols = [
-        'Age',           # 18,705 missing
-        'Annual Income', # 44,949 missing
-        'Health Score',  # 74,076 missing
-        'Credit Score',  # 137,882 missing
-        'Vehicle Age'    # 6 missing
-    ]
-    discrete_numeric_cols = [
+    numeric_cols = [
+        'Age',                  # 18,705 missing
+        'Annual Income',        # 44,949 missing
+        'Health Score',         # 74,076 missing
+        'Credit Score',         # 137,882 missing
+        'Vehicle Age',          # 6 missing
         'Number of Dependents', # 109,672 missing (0 to 4)
         'Previous Claims',      # 364,029 missing (0,1,2,...)
         'Insurance Duration'    # 1 missing (1 to 9 years)
     ]
+
     categorical_cols = [
-        'Gender',           # 0 missing
-        'Marital Status',   # 18,529 missing
-        'Education Level',  # 0 missing
-        'Occupation',       # 358,075 missing
-        'Location',         # 0 missing
-        'Policy Type',      # 0 missing
-        'Customer Feedback',# 77,824 missing
-        'Smoking Status',   # 0 missing
-        'Exercise Frequency',# 0 missing
-        'Property Type'     # 0 missing
+        'Gender',               # 0 missing
+        'Marital Status',       # 18,529 missing
+        'Education Level',      # 0 missing
+        'Occupation',           # 358,075 missing
+        'Location',             # 0 missing
+        'Policy Type',          # 0 missing
+        'Customer Feedback',    # 77,824 missing
+        'Smoking Status',       # 0 missing
+        'Exercise Frequency',   # 0 missing
+        'Property Type'         # 0 missing
     ]
 
     # -------------------------------------------------------
     # 4. Create Pipelines for numeric and categorical columns
     # -------------------------------------------------------
-    # Continuous numeric pipeline
-    continuous_numeric_transformer = Pipeline(steps=[
-        ('dist_imputer', DistributionImputer(col_type='continuous', random_state=42))
-    ])
-
-    # Discrete numeric pipeline
-    # You can treat them as continuous or categorical, depending on your preference
-    discrete_numeric_transformer = Pipeline(steps=[
-        ('dist_imputer', DistributionImputer(col_type='continuous', random_state=42))
+    # Numeric pipeline
+    numeric_transformer = Pipeline(steps=[
+        ('dist_imputer', DistributionImputer(col_type='numeric', random_state=42))
     ])
 
     # Categorical pipeline
@@ -183,8 +176,7 @@ def preprocess_data(df):
 
     preprocessor = ColumnTransformer(
         transformers=[
-            ('cont_num', continuous_numeric_transformer, continuous_numeric_cols),
-            ('disc_num', discrete_numeric_transformer, discrete_numeric_cols),
+            ('num', numeric_transformer, numeric_cols),
             ('cat', categorical_transformer, categorical_cols)
         ],
         remainder='passthrough'  # keep other columns if present
@@ -196,7 +188,7 @@ def preprocess_data(df):
     df_imputed_array = preprocessor.fit_transform(df)
 
     # Reconstruct a pandas DataFrame
-    all_features = continuous_numeric_cols + discrete_numeric_cols + categorical_cols
+    all_features = numeric_cols + categorical_cols
     df_imputed = pd.DataFrame(df_imputed_array, columns=all_features)
 
     # -------------------------------------------------------
