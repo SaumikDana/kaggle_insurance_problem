@@ -15,6 +15,7 @@ def define_segments(df):
             reliability_score -= df[col] * 0.1
     
     segments = {
+
         'High_Value_Property': (
             (df['Property Type'].isin(['House', 'Condo'])) &
             (df['Annual Income'] >= df['Annual Income'].quantile(0.55)) &
@@ -54,6 +55,7 @@ def define_segments(df):
              (df['Credit Score'] < df['Credit Score'].quantile(0.35))) &
             (df['Policy Type'] == 'Basic')
         )
+
     }
     
     return segments
@@ -91,3 +93,13 @@ def segment_data(df):
     print(f"Records per segment on average: {total_assigned/len(segments):,.1f}")
 
     return segments
+
+
+def segment_test_data(df, segment_function):
+
+    """Segment test data using the provided segmentation logic."""
+    segments = segment_function(df)
+
+    return {key: df[mask] for key, mask in segments.items()}
+
+
