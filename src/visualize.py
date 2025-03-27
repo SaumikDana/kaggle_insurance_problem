@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+
 def visualize(df):
 
     # Separate numerical features excluding 'Premium Amount'

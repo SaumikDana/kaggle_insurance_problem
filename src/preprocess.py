@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 
 # -------------------------------------------------------
 # Impute missing values in numeric columns by sampling 
@@ -127,17 +126,3 @@ def preprocess_data(df):
 
     # Return the cleaned DataFrame and the id column separately
     return df, id_col
-
-
-def initialize_metadata(df):
-
-    categorical_features = df.select_dtypes(include=['object', 'category']).columns.tolist()
-
-    if 'Premium Amount' in categorical_features:
-
-        categorical_features.remove('Premium Amount')
-    
-    category_mappings = {col: sorted(df[col].unique()) for col in categorical_features}
-
-    return categorical_features, category_mappings
-
