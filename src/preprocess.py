@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
 
 # -------------------------------------------------------
 # Multi-Column DistributionImputer
@@ -99,10 +102,6 @@ class DistributionImputer(BaseEstimator, TransformerMixin):
 # -------------------------------------------------------
 # preprocess_data Function
 # -------------------------------------------------------
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-
 def preprocess_data(df):
     """
     Takes a DataFrame 'df' as input and returns:
