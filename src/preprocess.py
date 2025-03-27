@@ -6,15 +6,28 @@ import pandas as pd
 # from existing non-null values in each column.
 # -------------------------------------------------------
 def impute_numeric_random(df, columns, random_state=None):
+
     rng = np.random.default_rng(random_state)
+
     for col in columns:
         if col not in df.columns:
             continue
         missing_mask = df[col].isna()
+
         if missing_mask.any():
+            # Get all non-missing values in the column
             values = df[col].dropna().values
+
+            # Only proceed if there are values to sample from
             if len(values) > 0:
-                df.loc[missing_mask, col] = rng.choice(values, size=missing_mask.sum(), replace=True)
+                # Randomly sample from the values (equal chance for each)
+                # and fill the missing positions in the column
+                df.loc[missing_mask, col] = rng.choice(
+                    values,
+                    size=missing_mask.sum(),
+                    replace=True
+                )
+
     return df
 
 # -------------------------------------------------------
@@ -22,16 +35,31 @@ def impute_numeric_random(df, columns, random_state=None):
 # according to the frequency distribution of existing values.
 # -------------------------------------------------------
 def impute_categorical_random(df, columns, random_state=None):
+
     rng = np.random.default_rng(random_state)
+
     for col in columns:
         if col not in df.columns:
             continue
         missing_mask = df[col].isna()
+
         if missing_mask.any():
+            # Get unique values and their counts from non-missing entries
             values, counts = np.unique(df[col].dropna(), return_counts=True)
+
+            # Convert counts to probabilities (normalize)
             probs = counts / counts.sum()
+
+            # Only proceed if there are values to sample from
             if len(values) > 0:
-                df.loc[missing_mask, col] = rng.choice(values, size=missing_mask.sum(), replace=True, p=probs)
+                # Sample missing values based on observed category frequencies
+                df.loc[missing_mask, col] = rng.choice(
+                    values,
+                    size=missing_mask.sum(),
+                    replace=True,
+                    p=probs  # 👈 use frequency-based probabilities here
+                )
+
     return df
 
 # -------------------------------------------------------
