@@ -1,216 +1,93 @@
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
 
-
-# -------------------------------------------------------
-# Multi-Column DistributionImputer
-# -------------------------------------------------------
-class DistributionImputer(BaseEstimator, TransformerMixin):
-    """
-    Imputer that randomly samples missing values from the empirical distribution
-    of each column (can handle multiple columns of the same type).
-    
-    Parameters
-    ----------
-    col_type : {'numeric', 'categorical'}, default='numeric'
-        'numeric': sample from raw numeric array of observed values per column
-        'categorical': sample from frequency distribution per column
-    random_state : int or None
-        random seed for reproducibility
-    """
-
-    def __init__(self, col_type='numeric', random_state=None):
-        self.col_type = col_type
-        self.random_state = random_state
-        
-    def fit(self, X, y=None):
-        """
-        X will be shape (n_samples, n_columns).
-        We'll learn the distribution separately for each column.
-        """
-        X = self._as_numpy_array(X)
-        self.n_cols_ = X.shape[1]
-        self.rng_ = np.random.default_rng(self.random_state)
-
-        # We'll store distribution info for each column in lists
-        self._col_values = []
-        self._col_categories = []
-        self._col_probs = []
-
-        for col_i in range(self.n_cols_):
-            col_data = X[:, col_i]
-            # Drop NaNs
-            non_missing = col_data[~pd.isna(col_data)]
-
-            if self.col_type == 'numeric':
-                # Just store raw non-missing values for sampling later
-                self._col_values.append(non_missing)
-                self._col_categories.append(None)
-                self._col_probs.append(None)
-            else:
-                # For categorical columns
-                categories, counts = np.unique(non_missing, return_counts=True)
-                probs = counts / counts.sum()
-
-                self._col_values.append(None)
-                self._col_categories.append(categories)
-                self._col_probs.append(probs)
-
-        return self
-
-    def transform(self, X):
-        """
-        Impute missing values in each column by sampling from learned distribution.
-        """
-        X = self._as_numpy_array(X)
-        for col_i in range(self.n_cols_):
-            col_data = X[:, col_i]
-            missing_mask = pd.isna(col_data)
-            if not np.any(missing_mask):
-                # no missing => skip
-                continue
-
-            n_missing = missing_mask.sum()
-            if self.col_type == 'numeric':
-                sample_pool = self._col_values[col_i]
-                if sample_pool is not None and len(sample_pool) > 0:
-                    X[missing_mask, col_i] = self.rng_.choice(sample_pool, size=n_missing, replace=True)
-            else:
-                cats = self._col_categories[col_i]
-                probs = self._col_probs[col_i]
-                if cats is not None and len(cats) > 0:
-                    X[missing_mask, col_i] = self.rng_.choice(
-                        cats, size=n_missing, replace=True, p=probs
-                    )
-
-        return X
-
-    @staticmethod
-    def _as_numpy_array(X):
-        """Helper to ensure we have a 2D numpy array."""
-        if isinstance(X, (pd.DataFrame, pd.Series)):
-            X = X.values
-        # If it's 1D, reshape to (n_samples, 1)
-        if X.ndim == 1:
-            X = X.reshape(-1, 1)
-        return X
-
+import numpy as np
+import pandas as pd
 
 # -------------------------------------------------------
-# preprocess_data Function
+# Impute missing values in numeric columns by sampling 
+# from existing non-null values in each column.
+# -------------------------------------------------------
+def impute_numeric_random(df, columns, random_state=None):
+    rng = np.random.default_rng(random_state)
+    for col in columns:
+        if col not in df.columns:
+            continue
+        missing_mask = df[col].isna()
+        if missing_mask.any():
+            values = df[col].dropna().values
+            if len(values) > 0:
+                df.loc[missing_mask, col] = rng.choice(values, size=missing_mask.sum(), replace=True)
+    return df
+
+# -------------------------------------------------------
+# Impute missing values in categorical columns by sampling 
+# according to the frequency distribution of existing values.
+# -------------------------------------------------------
+def impute_categorical_random(df, columns, random_state=None):
+    rng = np.random.default_rng(random_state)
+    for col in columns:
+        if col not in df.columns:
+            continue
+        missing_mask = df[col].isna()
+        if missing_mask.any():
+            values, counts = np.unique(df[col].dropna(), return_counts=True)
+            probs = counts / counts.sum()
+            if len(values) > 0:
+                df.loc[missing_mask, col] = rng.choice(values, size=missing_mask.sum(), replace=True, p=probs)
+    return df
+
+# -------------------------------------------------------
+# Preprocess input DataFrame:
+# - Drop unused columns
+# - Impute missing values (numeric & categorical)
+# - Restore original dtypes
+# - Reattach important columns ('id', 'Premium Amount')
 # -------------------------------------------------------
 def preprocess_data(df):
-    """
-    Takes a DataFrame 'df' as input and returns:
-      1) The 'id' column as a Series.
-      2) The imputed DataFrame (with no missing values) + the original Premium Amount column.
-         -- now with original dtypes re-applied where possible.
-    """
-
-    # -------------------------------------------------------
-    # 0. Capture the original dtypes
-    # -------------------------------------------------------
+    # Backup original data types for later re-application
     original_dtypes = df.dtypes.to_dict()
 
-    # -------------------------------------------------------
-    # 1. Extract 'id' and 'Premium Amount' columns
-    # -------------------------------------------------------
+    # Extract 'id' column
     id_col = df['id'].copy()
-    if 'Premium Amount' in df.columns:
-        flag = True
-        premium_col = df['Premium Amount'].copy()
-    else:
-        flag = False
 
-    # -------------------------------------------------------
-    # 2. Drop unwanted columns
-    # -------------------------------------------------------
-    # 'errors="ignore"' just in case the columns don't exist
+    # Extract target column if present
+    flag = 'Premium Amount' in df.columns
     if flag:
-        df.drop(columns=['id', 'Policy Start Date', 'Premium Amount'], inplace=True, errors='ignore')
-    else:
-        df.drop(columns=['id', 'Policy Start Date'], inplace=True, errors='ignore')
+        premium_col = df['Premium Amount'].copy()
 
-    # -------------------------------------------------------
-    # 3. Identify which columns are numeric vs. categorical
-    # -------------------------------------------------------
+    # Drop unused columns
+    df = df.drop(columns=['id', 'Policy Start Date', 'Premium Amount'] if flag else ['id', 'Policy Start Date'], errors='ignore')
+
+    # Define numeric and categorical feature sets
     numeric_cols = [
-        'Age',                  # 18,705 missing
-        'Annual Income',        # 44,949 missing
-        'Health Score',         # 74,076 missing
-        'Credit Score',         # 137,882 missing
-        'Vehicle Age',          # 6 missing
-        'Number of Dependents', # 109,672 missing (0 to 4)
-        'Previous Claims',      # 364,029 missing (0,1,2,...)
-        'Insurance Duration'    # 1 missing (1 to 9 years)
+        'Age', 'Annual Income', 'Health Score', 'Credit Score', 'Vehicle Age',
+        'Number of Dependents', 'Previous Claims', 'Insurance Duration'
     ]
 
     categorical_cols = [
-        'Gender',               # 0 missing
-        'Marital Status',       # 18,529 missing
-        'Education Level',      # 0 missing
-        'Occupation',           # 358,075 missing
-        'Location',             # 0 missing
-        'Policy Type',          # 0 missing
-        'Customer Feedback',    # 77,824 missing
-        'Smoking Status',       # 0 missing
-        'Exercise Frequency',   # 0 missing
-        'Property Type'         # 0 missing
+        'Gender', 'Marital Status', 'Education Level', 'Occupation', 'Location',
+        'Policy Type', 'Customer Feedback', 'Smoking Status', 'Exercise Frequency', 'Property Type'
     ]
 
-    # -------------------------------------------------------
-    # 4. Create Pipelines for numeric and categorical columns
-    # -------------------------------------------------------
-    # Numeric pipeline
-    numeric_transformer = Pipeline(steps=[
-        ('dist_imputer', DistributionImputer(col_type='numeric', random_state=42))
-    ])
+    # Impute missing values using random sampling
+    df = impute_numeric_random(df, numeric_cols, random_state=42)
+    df = impute_categorical_random(df, categorical_cols, random_state=42)
 
-    # Categorical pipeline
-    categorical_transformer = Pipeline(steps=[
-        ('dist_imputer', DistributionImputer(col_type='categorical', random_state=42))
-    ])
-
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('num', numeric_transformer, numeric_cols),
-            ('cat', categorical_transformer, categorical_cols)
-        ],
-        remainder='passthrough'  # keep other columns if present
-    )
-
-    # -------------------------------------------------------
-    # 5. Fit the transformer & transform
-    # -------------------------------------------------------
-    df_imputed_array = preprocessor.fit_transform(df)
-
-    # Reconstruct a pandas DataFrame
-    all_features = numeric_cols + categorical_cols
-    df_imputed = pd.DataFrame(df_imputed_array, columns=all_features)
-
-    # -------------------------------------------------------
-    # 6. Add 'Premium Amount' back
-    # -------------------------------------------------------
+    # Add back 'Premium Amount' if it was removed
     if flag:
-        df_imputed['Premium Amount'] = premium_col.values
+        df['Premium Amount'] = premium_col.values
 
-    # -------------------------------------------------------
-    # 7. Re-apply the original dtypes where possible
-    # -------------------------------------------------------
-    for col, orig_dtype in original_dtypes.items():
-        if col in df_imputed.columns:
+    # Restore original data types wherever possible
+    for col, dtype in original_dtypes.items():
+        if col in df.columns:
             try:
-                df_imputed[col] = df_imputed[col].astype(orig_dtype)
-            except ValueError as e:
-                # If casting fails (e.g., float -> int with decimals), you'll see a warning
-                print(f"[WARNING] Could not cast '{col}' to {orig_dtype}: {e}")
+                df[col] = df[col].astype(dtype)
+            except Exception as e:
+                print(f"[WARNING] Could not cast '{col}' to {dtype}: {e}")
 
-    # Return both 'id' (as Series) and the final DataFrame (with Premium Amount)
-    return df_imputed, id_col
-
+    # Return the cleaned DataFrame and the id column separately
+    return df, id_col
 
 # -------------------------------------------------------
 # Example usage
